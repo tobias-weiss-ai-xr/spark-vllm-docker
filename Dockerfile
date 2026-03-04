@@ -6,7 +6,7 @@ ARG BUILD_JOBS=16
 # =========================================================
 # STAGE 1: Base Image (Installs Dependencies)
 # =========================================================
-FROM nvcr.io/nvidia/pytorch:26.02-py3 AS base
+FROM nvcr.io/nvidia/pytorch:26.01-py3 AS base
 
 # Build parallemism
 ARG BUILD_JOBS
