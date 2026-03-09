@@ -194,6 +194,8 @@ RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
 # TEMPORARY PATCH for broken vLLM build (unguarded Hopper code) - reverting PR #34758 and #34302
 RUN curl -L https://patch-diff.githubusercontent.com/raw/vllm-project/vllm/pull/34758.diff | patch -p1 -R || echo "Cannot revert PR #34758, skipping"
 RUN curl -L https://patch-diff.githubusercontent.com/raw/vllm-project/vllm/pull/34302.diff | patch -p1 -R || echo "Cannot revert PR #34302, skipping"
+# TEMPORARY PATCH for CUDA graphs estimation 
+RUN curl -L https://patch-diff.githubusercontent.com/raw/vllm-project/vllm/pull/36416.diff | patch -p1 || echo "Cannot apply PR #36416, skipping"
 
 # Final Compilation
 RUN --mount=type=cache,id=ccache,target=/root/.ccache \
