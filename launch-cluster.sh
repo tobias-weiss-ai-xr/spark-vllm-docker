@@ -549,52 +549,39 @@ apply_mod_to_container() {
     fi
 }
 
-# Copy Launch Script to Container Function
-copy_launch_script_to_container() {
-    local container="$1"
-    local script_path="$2"
-
-    echo "Copying launch script to head node..."
-
-    # Copy script into container as /workspace/exec-script.sh
-    docker cp "$script_path" "$container:/workspace/exec-script.sh"
-
-    # Make executable
-    docker exec "$container" chmod +x /workspace/exec-script.sh
-
-    echo "  Launch script copied to head node"
-}
-
-# Copy Launch Script to Worker via SSH + docker cp
-copy_launch_script_to_worker() {
-    local worker_ip="$1"; local container="$2"; local script_path="$3"
-    echo "Copying launch script to worker $worker_ip..."
-    local remote_tmp="/tmp/vllm_script_$(date +%s)_$RANDOM.sh"
-    scp -o BatchMode=yes -o StrictHostKeyChecking=no "$script_path" "$worker_ip:$remote_tmp"
-    ssh -o BatchMode=yes -o StrictHostKeyChecking=no "$worker_ip" \
-        "docker cp $remote_tmp $container:/workspace/exec-script.sh && \
-         docker exec $container chmod +x /workspace/exec-script.sh && \
-         rm -f $remote_tmp"
-}
-
-# Patch /workspace/exec-script.sh in container: inject --nnodes/--node-rank/--master-addr/--headless
-patch_script_in_container() {
-    local is_local="$1"; local node_ip="$2"; local container="$3"
-    local nnodes="$4"; local node_rank="$5"; local master_addr="$6"
-
+# Build a patched copy of the launch script on the host for a specific node.
+# Strips --distributed-executor-backend and appends multi-node args.
+# Prints the path of the temp file (caller must delete it).
+make_node_script() {
+    local script_path="$1"; local nnodes="$2"; local node_rank="$3"; local master_addr="$4"
     local extra="--nnodes $nnodes --node-rank $node_rank --master-addr $master_addr"
     [[ "$node_rank" -gt 0 ]] && extra="$extra --headless"
 
-    local patch="sed -i '/--distributed-executor-backend/d' /workspace/exec-script.sh && \
-        echo '$extra' >> /workspace/exec-script.sh && \
-        chmod +x /workspace/exec-script.sh"
+    local tmp; tmp=$(mktemp /tmp/vllm_node_script_XXXXXX.sh)
+    grep -v -- '--distributed-executor-backend' "$script_path" > "$tmp"
+    echo "$extra" >> "$tmp"
+    chmod +x "$tmp"
+    echo "$tmp"
+}
 
-    if [[ "$is_local" == "true" ]]; then
-        docker exec "$container" bash -c "$patch"
-    else
-        ssh -o BatchMode=yes -o StrictHostKeyChecking=no "$node_ip" \
-            "docker exec $container bash -c \"$patch\""
-    fi
+# Copy a script file into a local container as /workspace/exec-script.sh
+copy_script_to_container() {
+    local container="$1"; local script_path="$2"; local label="${3:-node}"
+    echo "Copying launch script to $label..."
+    docker cp "$script_path" "$container:/workspace/exec-script.sh" || { echo "Error: docker cp to $label failed"; exit 1; }
+    docker exec "$container" chmod +x /workspace/exec-script.sh
+}
+
+# Copy a script file to a remote container via scp + docker cp
+copy_script_to_worker() {
+    local worker_ip="$1"; local container="$2"; local script_path="$3"
+    echo "Copying launch script to worker $worker_ip..."
+    local remote_tmp="/tmp/vllm_script_$(date +%s)_$RANDOM.sh"
+    scp -o BatchMode=yes -o StrictHostKeyChecking=no "$script_path" "$worker_ip:$remote_tmp" || { echo "Error: scp to $worker_ip failed"; exit 1; }
+    ssh -o BatchMode=yes -o StrictHostKeyChecking=no "$worker_ip" \
+        "docker cp $remote_tmp $container:/workspace/exec-script.sh && \
+         docker exec $container chmod +x /workspace/exec-script.sh && \
+         rm -f $remote_tmp" || { echo "Error: docker cp to worker $worker_ip failed"; exit 1; }
 }
 
 # Build -e KEY=VALUE flags for a given node IP (used in docker run and docker exec)
@@ -696,15 +683,21 @@ start_cluster() {
     # Copy (and patch for no-ray) launch script
     if [[ -n "$LAUNCH_SCRIPT_PATH" ]]; then
         local total_nodes=$(( 1 + ${#PEER_NODES[@]} ))
-        copy_launch_script_to_container "$CONTAINER_NAME" "$LAUNCH_SCRIPT_PATH"
         if [[ "$NO_RAY_MODE" == "true" ]]; then
-            patch_script_in_container "true" "$HEAD_IP" "$CONTAINER_NAME" "$total_nodes" "0" "$HEAD_IP"
+            # Build per-node patched scripts on the host, then copy
+            local head_script; head_script=$(make_node_script "$LAUNCH_SCRIPT_PATH" "$total_nodes" "0" "$HEAD_IP")
+            copy_script_to_container "$CONTAINER_NAME" "$head_script" "head node ($HEAD_IP)"
+            rm -f "$head_script"
+
             local rank=1
             for worker in "${PEER_NODES[@]}"; do
-                copy_launch_script_to_worker "$worker" "$CONTAINER_NAME" "$LAUNCH_SCRIPT_PATH"
-                patch_script_in_container "false" "$worker" "$CONTAINER_NAME" "$total_nodes" "$rank" "$HEAD_IP"
+                local worker_script; worker_script=$(make_node_script "$LAUNCH_SCRIPT_PATH" "$total_nodes" "$rank" "$HEAD_IP")
+                copy_script_to_worker "$worker" "$CONTAINER_NAME" "$worker_script"
+                rm -f "$worker_script"
                 (( rank++ ))
             done
+        else
+            copy_script_to_container "$CONTAINER_NAME" "$LAUNCH_SCRIPT_PATH" "head node"
         fi
     fi
 
