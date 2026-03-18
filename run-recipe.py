@@ -827,6 +827,7 @@ Examples:
         dest="no_ray",
         help="No-Ray mode: run multi-node vLLM without Ray (uses PyTorch distributed backend)"
     )
+    launch_group.add_argument("--master-port", "--head-port", type=int, dest="master_port", help="Port for cluster coordination (Ray head port or PyTorch distributed master port, default: 29501)")
     launch_group.add_argument("--name", dest="container_name", help="Override container name (default: vllm_node)")
     launch_group.add_argument("--eth-if", dest="eth_if", help="Ethernet interface (overrides .env and auto-detection)")
     launch_group.add_argument("--ib-if", dest="ib_if", help="InfiniBand interface (overrides .env and auto-detection)")
@@ -1165,6 +1166,8 @@ Examples:
             cmd_parts.extend(["--nccl-debug", args.nccl_debug])
         for env_var in args.env_vars:
             cmd_parts.extend(["-e", env_var])
+        if args.master_port:
+            cmd_parts.extend(["--master-port", str(args.master_port)])
         if args.container_name:
             cmd_parts.extend(["--name", args.container_name])
         if eth_if:
@@ -1232,6 +1235,8 @@ Examples:
         for env_var in args.env_vars:
             cmd.extend(["-e", env_var])
 
+        if args.master_port:
+            cmd.extend(["--master-port", str(args.master_port)])
         if args.container_name:
             cmd.extend(["--name", args.container_name])
         if eth_if:
