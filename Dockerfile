@@ -38,7 +38,7 @@ RUN apt update && \
     curl vim cmake build-essential ninja-build \
     libcudnn9-cuda-13 libcudnn9-dev-cuda-13 \
     python3-dev python3-pip git wget \
-    libnccl-dev libnccl2 libibverbs1 libibverbs-dev rdma-core \
+    libibverbs1 libibverbs-dev rdma-core \
     ccache devscripts debhelper fakeroot \
     && rm -rf /var/lib/apt/lists/* \
     && pip install uv
@@ -70,7 +70,7 @@ WORKDIR $VLLM_BASE_DIR
 # Build NCCL with mesh support (TODO: only do it if arch is 12.1) - artifacts will be in /workspace/nccl/build/pkg/deb
 RUN git clone -b dgxspark-3node-ring https://github.com/zyang-dev/nccl.git && \
     cd nccl && make -j ${BUILD_JOBS} src.build NVCC_GENCODE="-gencode=arch=compute_121,code=sm_121" && \
-    make pkg.debian.build && apt install -y --no-install-recommends ./build/pkg/deb/*.deb
+    make pkg.debian.build && apt install -y --no-install-recommends --allow-downgrades ./build/pkg/deb/*.deb
 
 # =========================================================
 # STAGE 2: FlashInfer Builder
@@ -246,7 +246,7 @@ RUN --mount=type=bind,from=base,source=/workspace/vllm/nccl/build/pkg/deb,target
     apt install -y --no-install-recommends \
     python3 python3-pip python3-dev vim curl git wget \
     libcudnn9-cuda-13 \
-    libnccl-dev libnccl2 libibverbs1 libibverbs-dev rdma-core \
+    libibverbs1 libibverbs-dev rdma-core \
     libxcb1 \
     && cd /workspace/nccl-pkg && apt install -y --no-install-recommends --allow-downgrades ./*.deb \
     && rm -rf /var/lib/apt/lists/* \
@@ -291,3 +291,7 @@ ENV PATH=$VLLM_BASE_DIR:$PATH
 # Final extra deps
 RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
     uv pip install ray[default] fastsafetensors
+
+# Fix NCCL
+RUN rm /usr/local/lib/python3.12/dist-packages/nvidia/nccl/lib/libnccl.so.2 && \
+    ln -s /usr/lib/aarch64-linux-gnu/libnccl.so.2 /usr/local/lib/python3.12/dist-packages/nvidia/nccl/lib/libnccl.so.2
