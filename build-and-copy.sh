@@ -27,6 +27,7 @@ FLASHINFER_RELEASE_TAG="prebuilt-flashinfer-current"
 VLLM_RELEASE_TAG="prebuilt-vllm-current"
 # Space-separated list of GPU architectures for which prebuilt wheels are available
 PREBUILT_WHEELS_SUPPORTED_ARCHS="12.1a"
+CLEANUP_MODE="false"
 
 cleanup() {
     if [ -n "$TMP_IMAGE" ] && [ -f "$TMP_IMAGE" ]; then
@@ -278,6 +279,7 @@ usage() {
     echo "  --full-log                    : Enable full build logging (--progress=plain)"
     echo "  --no-build                    : Skip building, only copy image (requires --copy-to)"
     echo "  --network <network>           : Docker network to use during build"
+    echo "  --cleanup                     : Remove all *.whl and *.-commit files in wheels directory"
     echo "  -h, --help                    : Show this help message"
     exit 1
 }
@@ -339,6 +341,7 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --full-log) FULL_LOG=true ;;
         --no-build) NO_BUILD=true ;;
+        --cleanup) CLEANUP_MODE=true ;;
         --network)
             if [ -n "$2" ] && [[ "$2" != -* ]]; then
                 NETWORK_ARG="$2"
@@ -370,6 +373,30 @@ fi
 if [ "$NO_BUILD" = true ] && [ "${#COPY_HOSTS[@]}" -eq 0 ]; then
     echo "Error: --no-build requires --copy-to to be specified"
     exit 1
+fi
+
+# Handle cleanup mode
+if [[ "$CLEANUP_MODE" == "true" ]]; then
+    WHEELS_DIR="./wheels"
+    echo "Cleaning up wheels directory..."
+    
+    # Remove all .whl files
+    if compgen -G "$WHEELS_DIR/*.whl" > /dev/null 2>&1; then
+        rm -f "$WHEELS_DIR"/*.whl
+        echo "Removed *.whl files from $WHEELS_DIR"
+    else
+        echo "No *.whl files found in $WHEELS_DIR"
+    fi
+    
+    # Remove all .-commit files
+    if compgen -G "$WHEELS_DIR/*.-commit" > /dev/null 2>&1; then
+        rm -f "$WHEELS_DIR"/*.-commit
+        echo "Removed *.-commit files from $WHEELS_DIR"
+    else
+        echo "No *.-commit files found in $WHEELS_DIR"
+    fi
+    
+    echo "Cleanup complete."
 fi
 
 # Ensure wheels directory exists
