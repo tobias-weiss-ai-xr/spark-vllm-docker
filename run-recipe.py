@@ -595,6 +595,7 @@ def run_autodiscover() -> dict[str, str] | None:
     # doesn't exist yet (it's the file we're about to create).
     env_vars = os.environ.copy()
     env_vars["CONFIG_FILE"] = str(ENV_FILE)
+    env_vars["FORCE_DISCOVER"] = "true"
     env_vars.pop("CONFIG_FILE_SET", None)
 
     # Run autodiscover interactively so its prompts are shown to the user
