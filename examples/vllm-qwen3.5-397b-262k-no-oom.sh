@@ -34,12 +34,13 @@
 #    -----------------------------|------------------
 #    Model weights (INT4-AutoRound)| ~60 GB
 #    KV cache (131K, fp8)         | ~15 GB
+#    Prefix cache                 | ~8 GB
 #    Compiled CUDA graphs         | ~5 GB
 #    Activations + overhead       | ~8 GB
 #    System reserved (GPU 8%)     | ~10 GB
 #    -----------------------------|------------------
-#    Total                        | ~98 GB / 128 GB
-#    Headroom                     | ~30 GB
+#    Total                        | ~106 GB / 128 GB
+#    Headroom                     | ~22 GB
 #
 # === Known Issues ===
 #
@@ -114,6 +115,13 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export VLLM_MARLIN_USE_ATOMIC_ADD=1
 export OMP_NUM_THREADS=4
 
+# MoE performance tuning
+export VLLM_MOE_BACKEND=deepgemm
+export VLLM_USE_FLASHINFER_MOE_FP8=1
+
+# Torch compile optimization
+export VLLM_TORCH_COMPILE_LEVEL=3
+
 # --- vLLM Serve Command ---
 
 vllm serve Intel/Qwen3.5-397B-A17B-int4-AutoRound \
@@ -126,6 +134,7 @@ vllm serve Intel/Qwen3.5-397B-A17B-int4-AutoRound \
     --enable-auto-tool-choice \
     --tool-call-parser qwen3_coder \
     --reasoning-parser qwen3 \
-    --max-num-batched-tokens 1024 \
+    --max-num-batched-tokens 2048 \
+    --enable-prefix-caching \
     --trust-remote-code \
     -tp 2
