@@ -5,28 +5,27 @@
 #              Includes post-reboot safety steps to prevent OOM and sudden shutdowns.
 #
 # Usage: ./launch-cluster.sh --no-ray --launch-script vllm-qwen3.5-397b-262k-no-oom.sh
-# Required mods: --apply-mod mods/fix-qwen3.5-autoround --apply-mod mods/fix-qwen3.5-chat-template --apply-mod mods/gpu-mem-util-gb
 
 # --- Post-Reboot Safety Steps ---
 
-# 1. Drop page caches to prevent model getting stuck loading weights
 echo "Dropping page caches..."
 sudo sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches'
 
-# 2. Limit GPU clock frequency to prevent sudden shutdowns during heavy inference
-#    Default max is 2411 MHz (can boost to 3000 MHz). Capping at 2150 MHz for stability.
 echo "Limiting GPU clock to 200-2150 MHz..."
 sudo nvidia-smi -lgc 200,2150
 
+# --- System Memory Tuning (OOM Prevention) ---
+
+echo "Tuning system memory parameters..."
+sudo sysctl -w vm.swappiness=10
+sudo sysctl -w vm.min_free_kbytes=524288
+sudo sysctl -w vm.dirty_background_ratio=5
+sudo sysctl -w vm.dirty_ratio=10
+
 # --- Environment Variables ---
 
-# Enable expandable segments for better memory fragmentation handling
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-
-# Use atomic add for Marlin kernels (required for INT4-AutoRound)
 export VLLM_MARLIN_USE_ATOMIC_ADD=1
-
-# Limit OpenMP threads to reduce memory pressure
 export OMP_NUM_THREADS=4
 
 # --- vLLM Serve Command ---
@@ -35,7 +34,8 @@ vllm serve Intel/Qwen3.5-397B-A17B-int4-AutoRound \
     --max-model-len 262144 \
     --max-num-seqs 2 \
     --kv-cache-dtype fp8 \
-    --gpu-memory-utilization-gb 110 \
+    --gpu-memory-utilization 0.88 \
+    --swap-space 16 \
     --port 8000 \
     --host 0.0.0.0 \
     --enable-prefix-caching \
