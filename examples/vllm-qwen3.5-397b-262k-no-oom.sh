@@ -22,7 +22,7 @@
 #    - vm.dirty_ratio=10: Force synchronous writeback at 10% dirty pages
 #
 # 3. CONSERVATIVE vLLM PARAMETERS
-#    - --gpu-memory-utilization 0.80: Reserve 20% GPU memory headroom (~24GB total)
+#    - --gpu-memory-utilization 0.92: Use most of GPU memory (compiled graphs are resident)
 #    - --max-num-seqs 1: Single-user mode (eliminates concurrent request memory spikes)
 #    - --max-num-batched-tokens 1024: Minimal batch memory footprint
 #    - --max-model-len 131072: Half context (saves ~12GB KV cache vs 262K)
@@ -33,12 +33,13 @@
 #    Component                    | Estimated Usage
 #    -----------------------------|------------------
 #    Model weights (INT4-AutoRound)| ~60 GB
-#    KV cache (131K, fp8)         | ~12 GB
+#    KV cache (131K, fp8)         | ~15 GB
+#    Compiled CUDA graphs         | ~5 GB
 #    Activations + overhead       | ~8 GB
-#    System reserved (GPU 20%)    | ~24 GB
+#    System reserved (GPU 8%)     | ~10 GB
 #    -----------------------------|------------------
-#    Total                        | ~104 GB / 128 GB
-#    Headroom                     | ~24 GB
+#    Total                        | ~98 GB / 128 GB
+#    Headroom                     | ~30 GB
 #
 # === Known Issues ===
 #
@@ -119,7 +120,7 @@ vllm serve Intel/Qwen3.5-397B-A17B-int4-AutoRound \
     --max-model-len 131072 \
     --max-num-seqs 1 \
     --kv-cache-dtype fp8 \
-    --gpu-memory-utilization 0.80 \
+    --gpu-memory-utilization 0.92 \
     --port 8000 \
     --host 0.0.0.0 \
     --enable-auto-tool-choice \
