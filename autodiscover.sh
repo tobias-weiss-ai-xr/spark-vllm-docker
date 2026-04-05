@@ -59,6 +59,11 @@ detect_interfaces() {
         return 0
     fi
 
+    # If ETH_IF is set but IB_IF is not, skip IB detection (NCCL auto-detects IB devices)
+    if [[ -n "$ETH_IF" && -z "$IB_IF" ]]; then
+        return 0
+    fi
+
     # Check for required tools
     if ! command -v ibdev2netdev &> /dev/null; then
         echo "Error: ibdev2netdev not found. Cannot auto-detect interfaces."

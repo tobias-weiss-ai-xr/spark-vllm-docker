@@ -267,6 +267,14 @@ if [[ -n "$DOTENV_LOCAL_IP" ]]; then
     export LOCAL_IP="$DOTENV_LOCAL_IP"
 fi
 
+# Extract NCCL settings from .env for use in get_env_flags
+if [[ -n "$DOTENV_CONTAINER_NCCL_IB_DISABLE" ]]; then
+    NCCL_IB_DISABLE="$DOTENV_CONTAINER_NCCL_IB_DISABLE"
+fi
+if [[ -n "$DOTENV_CONTAINER_NCCL_SOCKET_IFNAME" ]]; then
+    NCCL_SOCKET_IFNAME="$DOTENV_CONTAINER_NCCL_SOCKET_IFNAME"
+fi
+
 # Validate non-privileged mode flags
 if [[ "$NON_PRIVILEGED_MODE" == "true" ]]; then
     # Set default swap limit if not specified
@@ -806,9 +814,9 @@ get_env_flags() {
         "RAY_OVERRIDE_NODE_IP_ADDRESS=$node_ip" \
         "MN_IF_NAME=$ETH_IF" \
         "UCX_NET_DEVICES=$ETH_IF" \
-        "NCCL_SOCKET_IFNAME=$ETH_IF" \
-        "NCCL_IB_HCA=$IB_IF" \
-        "NCCL_IB_DISABLE=0" \
+        "NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME:-$ETH_IF}" \
+        ${IB_IF:+NCCL_IB_HCA=$IB_IF} \
+        "NCCL_IB_DISABLE=${NCCL_IB_DISABLE:-0}" \
         "OMPI_MCA_btl_tcp_if_include=$ETH_IF" \
         "GLOO_SOCKET_IFNAME=$ETH_IF" \
         "TP_SOCKET_IFNAME=$ETH_IF" \
@@ -981,6 +989,9 @@ exec_no_ray_cluster() {
             "docker exec -d $CONTAINER_NAME bash -c \"$worker_cmd >> /proc/1/fd/1 2>&1\""
         (( rank++ ))
     done
+
+    # Brief delay to let workers initialize before head starts
+    sleep 3
 
     # Launch head (rank 0) last
     local head_cmd
